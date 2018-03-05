@@ -51,7 +51,7 @@ deps = [
 
 # XCB stuff
 deps += [
-    subproject('libgwater/xcb').get_variable('libgwater_xcb'),
+    subproject('xcb').get_variable('libgwater_xcb'),
     dependency('xcb-aux'),
     dependency('xcb-xkb'),
     dependency('xkbcommon-x11'),

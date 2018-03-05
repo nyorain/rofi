@@ -1287,6 +1287,8 @@ gboolean display_late_setup ( void )
     if ( find_arg ( "-normal-window" ) >= 0 ) {
         return TRUE;
     }
+
+	/*
     if ( find_arg ( "-no-lazy-grab" ) >= 0 ) {
         if ( !take_keyboard ( xcb_stuff_get_root_window (), 500 ) ) {
             g_warning ( "Failed to grab keyboard, even after %d uS.", 500 * 1000 );
@@ -1304,6 +1306,8 @@ gboolean display_late_setup ( void )
             g_timeout_add ( 1, lazy_grab_pointer, NULL );
         }
     }
+	*/
+
     return TRUE;
 }
 

@@ -1018,64 +1018,73 @@ static void rofi_view_refilter ( RofiViewState *state )
         state->tokens = NULL;
     }
     if ( state->text && strlen ( state->text->text ) > 0 ) {
-        unsigned int j        = 0;
-        gchar        *pattern = mode_preprocess_input ( state->sw, state->text->text );
-        glong        plen     = pattern ? g_utf8_strlen ( pattern, -1 ) : 0;
-        state->tokens = helper_tokenize ( pattern, config.case_sensitive );
-        /**
-         * On long lists it can be beneficial to parallelize.
-         * If number of threads is 1, no thread is spawn.
-         * If number of threads > 1 and there are enough (> 1000) items, spawn jobs for the thread pool.
-         * For large lists with 8 threads I see a factor three speedup of the whole function.
-         */
-        unsigned int nt = MAX ( 1, state->num_lines / 500 );
-        thread_state states[nt];
-        GCond        cond;
-        GMutex       mutex;
-        g_mutex_init ( &mutex );
-        g_cond_init ( &cond );
-        unsigned int count = nt;
-        unsigned int steps = ( state->num_lines + nt ) / nt;
-        for ( unsigned int i = 0; i < nt; i++ ) {
-            states[i].state    = state;
-            states[i].start    = i * steps;
-            states[i].stop     = MIN ( state->num_lines, ( i + 1 ) * steps );
-            states[i].count    = 0;
-            states[i].cond     = &cond;
-            states[i].mutex    = &mutex;
-            states[i].acount   = &count;
-            states[i].plen     = plen;
-            states[i].pattern  = pattern;
-            states[i].callback = filter_elements;
-            if ( i > 0 ) {
-                g_thread_pool_push ( tpool, &states[i], NULL );
-            }
-        }
-        // Run one in this thread.
-        rofi_view_call_thread ( &states[0], NULL );
-        // No need to do this with only one thread.
-        if ( nt > 1 ) {
-            g_mutex_lock ( &mutex );
-            while ( count > 0 ) {
-                g_cond_wait ( &cond, &mutex );
-            }
-            g_mutex_unlock ( &mutex );
-        }
-        g_cond_clear ( &cond );
-        g_mutex_clear ( &mutex );
-        for ( unsigned int i = 0; i < nt; i++ ) {
-            if ( j != states[i].start ) {
-                memmove ( &( state->line_map[j] ), &( state->line_map[states[i].start] ), sizeof ( unsigned int ) * ( states[i].count ) );
-            }
-            j += states[i].count;
-        }
-        if ( config.sort ) {
-            g_qsort_with_data ( state->line_map, j, sizeof ( int ), lev_sort, state->distance );
-        }
+        gchar *pattern = mode_preprocess_input ( state->sw, state->text->text );
+		if ( pattern ) {
+        	unsigned int j = 0;
+			glong plen = g_utf8_strlen ( pattern, -1 );
+			state->tokens = helper_tokenize ( pattern, config.case_sensitive );
+			/**
+			 * On long lists it can be beneficial to parallelize.
+			 * If number of threads is 1, no thread is spawn.
+			 * If number of threads > 1 and there are enough (> 1000) items, spawn jobs for the thread pool.
+			 * For large lists with 8 threads I see a factor three speedup of the whole function.
+			 */
+			unsigned int nt = MAX ( 1, state->num_lines / 500 );
+			thread_state states[nt];
+			GCond        cond;
+			GMutex       mutex;
+			g_mutex_init ( &mutex );
+			g_cond_init ( &cond );
+			unsigned int count = nt;
+			unsigned int steps = ( state->num_lines + nt ) / nt;
+			for ( unsigned int i = 0; i < nt; i++ ) {
+				states[i].state    = state;
+				states[i].start    = i * steps;
+				states[i].stop     = MIN ( state->num_lines, ( i + 1 ) * steps );
+				states[i].count    = 0;
+				states[i].cond     = &cond;
+				states[i].mutex    = &mutex;
+				states[i].acount   = &count;
+				states[i].plen     = plen;
+				states[i].pattern  = pattern;
+				states[i].callback = filter_elements;
+				if ( i > 0 ) {
+					g_thread_pool_push ( tpool, &states[i], NULL );
+				}
+			}
+			// Run one in this thread.
+			rofi_view_call_thread ( &states[0], NULL );
+			// No need to do this with only one thread.
+			if ( nt > 1 ) {
+				g_mutex_lock ( &mutex );
+				while ( count > 0 ) {
+					g_cond_wait ( &cond, &mutex );
+				}
+				g_mutex_unlock ( &mutex );
+			}
+			g_cond_clear ( &cond );
+			g_mutex_clear ( &mutex );
+			for ( unsigned int i = 0; i < nt; i++ ) {
+				if ( j != states[i].start ) {
+					memmove ( &( state->line_map[j] ), &( state->line_map[states[i].start] ), sizeof ( unsigned int ) * ( states[i].count ) );
+				}
+				j += states[i].count;
+			}
+			if ( config.sort ) {
+				g_qsort_with_data ( state->line_map, j, sizeof ( int ), lev_sort, state->distance );
+			}
 
-        // Cleanup + bookkeeping.
-        state->filtered_lines = j;
-        g_free ( pattern );
+			// Cleanup + bookkeeping.
+			state->filtered_lines = j;
+			g_free ( pattern );
+		} 
+		else{
+        	_rofi_view_reload_row ( state );
+			for ( unsigned int i = 0; i < state->num_lines; i++ ) {
+				state->line_map[i] = i;
+			}
+			state->filtered_lines = state->num_lines;
+		}
     }
     else{
         for ( unsigned int i = 0; i < state->num_lines; i++ ) {
